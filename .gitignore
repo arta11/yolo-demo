@@ -1,6 +1,7 @@
 # Virtual environment
 venv/
 ENV/
+ENV/
 env/
 .venv/
 
@@ -10,7 +11,8 @@ __pycache__/
 *.pyo
 *.pyd
 
-# If you have huge models use .onnx only (but keep .pt allowed)
+# Ignore YOLO model weights
+*.pt
 *.onnx
 
 # Environment variables
