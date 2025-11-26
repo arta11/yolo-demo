@@ -1,7 +1,6 @@
 # Virtual environment
 venv/
 ENV/
-ENV/
 env/
 .venv/
 
@@ -11,8 +10,10 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Ignore YOLO model weights
-*.pt
+# Allow our YOLO model file
+!yolov8n.pt
+
+# Ignore other model formats (optional)
 *.onnx
 
 # Environment variables
