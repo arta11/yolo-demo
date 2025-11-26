@@ -8,11 +8,12 @@ from ultralytics import YOLO
 from PIL import Image
 import torch
 
-# Make PyTorch lighter on small instances
+# Keep PyTorch light on small CPUs
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
-MODEL_PATH = os.getenv("YOLO_MODEL", "yolov8n.pt")  # nano model
+# Which model to use (override via env if you want)
+MODEL_PATH = os.getenv("YOLO_MODEL", "yolov8n.pt")
 
 try:
     model = YOLO(MODEL_PATH)
@@ -21,9 +22,10 @@ except Exception as e:
 
 app = FastAPI(title="YOLO Backend", version="1.0.0")
 
+# CORS – allow your frontend to call this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],     # tighten later if you want
+    allow_origins=["*"],          # you can restrict to your domain later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,10 +40,10 @@ def root():
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     # 1. Basic validation
-    if not file.content_type.startswith("image/"):
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image.")
 
-    # 2. Read image
+    # 2. Read and decode image
     try:
         contents = await file.read()
         img = Image.open(BytesIO(contents)).convert("RGB")
@@ -50,25 +52,20 @@ async def predict(file: UploadFile = File(...)):
 
     orig_w, orig_h = img.size
 
-    # 3. Downscale big images to save RAM
-    MAX_SIZE = 1024
-    img.thumbnail((MAX_SIZE, MAX_SIZE))
-    resized_w, resized_h = img.size
-
-    # 4. Run YOLO
+    # 3. Run YOLO (let YOLO handle internal resizing to imgsz=640)
     try:
         results = model.predict(
             img,
-            imgsz=min(MAX_SIZE, 640),
-            conf=0.25,
+            imgsz=640,      # standard YOLO size; change if you like
+            conf=0.25,      # confidence threshold
             verbose=False
         )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"Inference error: {e}")
 
-    # 5. Build detections in BOTH formats:
-    #    - boxes/scores/class_ids  (old frontend)
-    #    - detections[]            (richer objects)
+    # 4. Build detections in both formats:
+    #    - boxes/scores/class_ids  (used by your current frontend)
+    #    - detections[]            (richer object list if needed later)
     boxes_list = []
     scores_list = []
     class_ids_list = []
@@ -77,10 +74,11 @@ async def predict(file: UploadFile = File(...)):
     if results and len(results) > 0:
         r = results[0]
         boxes = r.boxes
-        names = r.names
+        names = r.names  # class id -> name mapping
 
         if boxes is not None:
             for box in boxes:
+                # xyxy are already in original-image coordinates for this img
                 xyxy = box.xyxy[0].tolist()  # [x1, y1, x2, y2]
                 conf = float(box.conf[0].item())
                 cls_id = int(box.cls[0].item())
@@ -106,8 +104,7 @@ async def predict(file: UploadFile = File(...)):
                     }
                 )
 
-    # 6. Response: compatible with your old frontend,
-    #    plus extra metadata if you want to use it later.
+    # 5. JSON response – fully compatible with your yolo.js
     return {
         "boxes": boxes_list,
         "scores": scores_list,
@@ -115,10 +112,6 @@ async def predict(file: UploadFile = File(...)):
         "detections": detections,
         "original_width": orig_w,
         "original_height": orig_h,
-        "resized_width": resized_w,
-        "resized_height": resized_h,
-        "scale_x": (orig_w / resized_w) if resized_w else 1.0,
-        "scale_y": (orig_h / resized_h) if resized_h else 1.0,
     }
 
 
