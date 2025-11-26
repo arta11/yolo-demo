@@ -1,0 +1,21 @@
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# If you have huge models use .onnx only (but keep .pt allowed)
+*.onnx
+
+# Environment variables
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
